@@ -22,7 +22,7 @@ export function useActiveSpeaker(remoteStreams: Map<string, MediaStream>): strin
 
     let audioCtx: AudioContext | null = null
     const analysers = new Map<string, AnalyserNode>()
-    const buffers   = new Map<string, Uint8Array>()
+    const buffers   = new Map<string, Uint8Array<ArrayBuffer>>()
     const sources: AudioNode[] = []
 
     try {
