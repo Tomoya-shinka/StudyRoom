@@ -24,21 +24,25 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   const [room, setRoom] = useState<RoomDTO | null>(null)
   const [peekRoom, setPeekRoom] = useState<RoomDTO | null>(null)
   const [userName, setUserName] = useState('')
+  const [nameModalOpen, setNameModalOpen] = useState(false)
+  const [nameInput, setNameInput] = useState('')
 
   useEffect(() => {
     const saved = localStorage.getItem('userName')
     if (!saved?.trim()) {
-      const input = prompt('表示名を入力してください')
-      if (!input?.trim()) {
-        router.push('/')
-        return
-      }
-      localStorage.setItem('userName', input.trim())
-      setUserName(input.trim())
+      setNameModalOpen(true)
     } else {
       setUserName(saved.trim())
     }
   }, [])
+
+  function confirmName() {
+    const trimmed = nameInput.trim()
+    if (!trimmed) return
+    localStorage.setItem('userName', trimmed)
+    setUserName(trimmed)
+    setNameModalOpen(false)
+  }
 
   useEffect(() => {
     setPeekRoom(null)
@@ -147,6 +151,44 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
       setTimeout(() => setCopied(false), 2000)
     })
   }, [])
+
+  if (nameModalOpen) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg-base">
+        <div className="bg-bg-card border border-border-muted rounded-2xl p-6 w-80 shadow-xl">
+          <p className="font-semibold mb-1">表示名を入力してください</p>
+          <p className="text-muted text-sm mb-4">部屋に参加する前に名前が必要です</p>
+          <input
+            autoFocus
+            type="text"
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && confirmName()}
+            placeholder="あなたの名前"
+            maxLength={30}
+            className="w-full px-3 py-2 rounded-lg bg-bg-input border border-border-subtle text-white placeholder-muted focus:outline-none focus:border-accent mb-4"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => router.push('/')}
+              className="flex-1 px-4 py-2 rounded-lg bg-bg-elevated hover:bg-border-subtle text-sm transition-colors"
+            >
+              戻る
+            </button>
+            <button
+              type="button"
+              onClick={confirmName}
+              disabled={!nameInput.trim()}
+              className="flex-1 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-bg-base font-semibold text-sm disabled:opacity-40 transition-colors"
+            >
+              続ける
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (!userName) {
     return (
