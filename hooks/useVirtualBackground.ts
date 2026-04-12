@@ -85,8 +85,11 @@ export function useVirtualBackground(
     video.muted = true
     video.playsInline = true
 
-    // Canvas stream (video) + original audio tracks
-    const canvasStream = canvas.captureStream(30)
+    // captureStream(0) = manual frame capture via requestFrame()
+    // This is required for replaceTrack() to deliver frames reliably via WebRTC.
+    // captureStream(N>0) only works for local display; WebRTC encoders don't poll it.
+    const canvasStream = canvas.captureStream(0)
+    const canvasVideoTrack = canvasStream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack & MediaStreamTrack
     rawStream.getAudioTracks().forEach((t) => canvasStream.addTrack(t))
 
     async function init() {
@@ -145,6 +148,9 @@ export function useVirtualBackground(
 
         // 3. Composite person on top of background
         ctx.drawImage(tempCanvas, 0, 0)
+
+        // Notify WebRTC encoder that a new frame is ready
+        canvasVideoTrack.requestFrame()
       })
 
       video.addEventListener('loadedmetadata', () => {
