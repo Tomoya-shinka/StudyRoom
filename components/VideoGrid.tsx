@@ -30,10 +30,10 @@ export default function VideoGrid({
   // ── SPEAKER MODE ────────────────────────────────────────────────────────────
   if (viewMode === 'speaker' && hasRemote) {
     return (
-      <div className="flex-1 relative">
-        {/* Main: active speaker fills entire area */}
-        <div className="absolute inset-0 p-3 rounded-xl overflow-hidden">
-          <div className="relative w-full h-full rounded-xl overflow-hidden">
+      <div className="flex-1 min-h-0 relative overflow-hidden p-3">
+        {/* Main: 16:9, as large as possible — same pattern as spotlight main tile */}
+        <div className="absolute inset-3 flex items-center justify-center">
+          <div className="relative rounded-xl overflow-hidden" style={{ aspectRatio: '16/9', height: '100%', maxWidth: '100%', width: 'auto' }}>
             <VideoTile
               stream={mainId ? (remoteStreams.get(mainId) ?? null) : null}
               name={mainId ? (participants.get(mainId)?.name ?? '参加者') : '参加者'}
@@ -43,12 +43,14 @@ export default function VideoGrid({
             />
           </div>
         </div>
-        {/* Self: thumbnail in bottom-right corner */}
-        <div className="absolute bottom-7 right-7 w-1/5 max-w-[200px] z-10 shadow-2xl">
+        {/* Self: fixed 16:9 thumbnail in bottom-right */}
+        <div className="absolute bottom-7 right-7 z-10 shadow-2xl rounded-xl overflow-hidden" style={{ width: 180, aspectRatio: '16/9' }}>
           <VideoTile
             stream={localStream}
             name={localName}
             isLocal
+            fill
+            compact
             isMuted={isMuted}
             isCameraOff={isCameraOff}
           />
