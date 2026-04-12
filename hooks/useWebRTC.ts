@@ -8,6 +8,7 @@ import type { ParticipantDTO, SignalPayload } from '@/types'
 export function useWebRTC(roomId: string, userName: string) {
   const socket = useSocket()
   const localStreamRef = useRef<MediaStream | null>(null)
+  const virtualVideoTrackRef = useRef<MediaStreamTrack | null>(null)
   const peersRef = useRef<Map<string, SimplePeerType.Instance>>(new Map())
   // SimplePeer constructor ref — loaded async, used inside sync socket handlers
   const SimplePeerRef = useRef<typeof SimplePeerType | null>(null)
@@ -48,6 +49,13 @@ export function useWebRTC(roomId: string, userName: string) {
           if (prev.has(targetSocketId)) return prev
           return new Map(prev).set(targetSocketId, new MediaStream())
         })
+        // Apply virtual background track if one is active at connection time
+        if (virtualVideoTrackRef.current) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pc = (peer as any)._pc as RTCPeerConnection
+          const sender = pc?.getSenders().find((s) => s.track?.kind === 'video')
+          if (sender) sender.replaceTrack(virtualVideoTrackRef.current).catch(() => {})
+        }
       })
       peer.on('stream', (remoteStream: MediaStream) => {
         setRemoteStreams((prev) => new Map(prev).set(targetSocketId, remoteStream))
@@ -203,13 +211,17 @@ export function useWebRTC(roomId: string, userName: string) {
     setLocalStream(newStream)
   }
 
-  async function replaceVideoTrack(newTrack: MediaStreamTrack | null) {
+  function replaceVideoTrack(newTrack: MediaStreamTrack | null) {
+    // Store so newly connecting peers also get the virtual track applied on connect
+    virtualVideoTrackRef.current = newTrack
+    const fallback = localStreamRef.current?.getVideoTracks()[0] ?? null
+    const trackToSend = newTrack ?? fallback
     peersRef.current.forEach((peer) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pc = (peer as any)._pc as RTCPeerConnection
       if (!pc) return
       const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
-      if (sender) sender.replaceTrack(newTrack)
+      if (sender) sender.replaceTrack(trackToSend).catch(() => {})
     })
   }
 

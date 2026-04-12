@@ -131,14 +131,23 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   const displayStream = processedStream ?? localStream
 
   // When processed stream changes, replace video track in all peers
-  const prevProcessedRef = useRef<MediaStream | null>(null)
   useEffect(() => {
-    if (processedStream === prevProcessedRef.current) return
-    prevProcessedRef.current = processedStream
-    const track = processedStream
-      ? processedStream.getVideoTracks()[0] ?? null
-      : localStream?.getVideoTracks()[0] ?? null
-    replaceVideoTrack(track)
+    if (processedStream) {
+      const canvasTrack = processedStream.getVideoTracks()[0]
+      if (!canvasTrack) return
+      // Wait until the canvas track is live before replacing (MediaPipe loads async)
+      if (canvasTrack.readyState === 'live') {
+        replaceVideoTrack(canvasTrack)
+      } else {
+        const onLive = () => replaceVideoTrack(canvasTrack)
+        canvasTrack.addEventListener('unmute', onLive)
+        return () => canvasTrack.removeEventListener('unmute', onLive)
+      }
+    } else {
+      // VB turned off — restore raw camera track
+      const rawTrack = localStream?.getVideoTracks()[0] ?? null
+      replaceVideoTrack(rawTrack)
+    }
   }, [processedStream, localStream])
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
