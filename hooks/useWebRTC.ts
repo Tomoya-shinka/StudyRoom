@@ -38,6 +38,26 @@ export function useWebRTC(roomId: string, userName: string) {
         initiator,
         stream: localStreamRef.current ?? undefined,
         trickle: true,
+        config: {
+          iceCandidatePoolSize: 10,
+          iceServers: [
+            // Multiple STUN servers for redundancy
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun.cloudflare.com:3478' },
+            // Free TURN relay — used when direct P2P fails (strict NAT, firewall)
+            {
+              urls: [
+                'turn:openrelay.metered.ca:80',
+                'turn:openrelay.metered.ca:443',
+                'turn:openrelay.metered.ca:443?transport=tcp',
+              ],
+              username: 'openrelayproject',
+              credential: 'openrelayproject',
+            },
+          ],
+        },
       })
       peer.on('signal', (data: SimplePeerType.SignalData) => {
         socket.emit('signal', { to: targetSocketId, from: socket.id, signal: data } as SignalPayload)
