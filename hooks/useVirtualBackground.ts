@@ -85,12 +85,12 @@ export function useVirtualBackground(
     video.muted = true
     video.playsInline = true
 
-    // captureStream(0) = manual frame capture via requestFrame()
-    // This is required for replaceTrack() to deliver frames reliably via WebRTC.
-    // captureStream(N>0) only works for local display; WebRTC encoders don't poll it.
-    const canvasStream = canvas.captureStream(0)
+    // captureStream(30) = auto-capture baseline for WebRTC encoder
+    // requestFrame() is also called after each draw for extra reliability
+    const canvasStream = canvas.captureStream(30)
     const canvasVideoTrack = canvasStream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack & MediaStreamTrack
     rawStream.getAudioTracks().forEach((t) => canvasStream.addTrack(t))
+    let streamReady = false  // only expose stream after first real frame
 
     async function init() {
       let SelfieSegmentation: typeof window.SelfieSegmentation
@@ -151,6 +151,13 @@ export function useVirtualBackground(
 
         // Notify WebRTC encoder that a new frame is ready
         canvasVideoTrack.requestFrame()
+
+        // Expose the stream only after the first real frame is drawn,
+        // so replaceTrack() is never called on an empty (black) canvas
+        if (!streamReady) {
+          streamReady = true
+          setProcessedStream(canvasStream)
+        }
       })
 
       video.addEventListener('loadedmetadata', () => {
@@ -174,7 +181,8 @@ export function useVirtualBackground(
     }
 
     init()
-    setProcessedStream(canvasStream)
+    // Note: setProcessedStream(canvasStream) is called inside onResults
+    // after the first real frame, not here — avoids replaceTrack on black canvas
 
     return () => {
       mounted = false
