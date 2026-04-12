@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import VideoTile from './VideoTile'
 import type { ParticipantDTO } from '@/types'
 
@@ -15,6 +16,24 @@ interface VideoGridProps {
   isCameraOff?: boolean
   viewMode: ViewMode
   activeSpeakerId: string | null
+}
+
+const GAP = 12
+const RATIO = 16 / 9
+
+function computeTileSize(containerW: number, containerH: number, n: number): { cols: number; tileW: number; tileH: number } {
+  let bestCols = 1, bestW = 0, bestH = 0
+  for (let cols = 1; cols <= Math.min(n, 4); cols++) {
+    const rows = Math.ceil(n / cols)
+    const cellW = (containerW - (cols - 1) * GAP) / cols
+    const cellH = (containerH - (rows - 1) * GAP) / rows
+    // Fit 16:9 tile inside cell
+    let tileW = cellW
+    let tileH = tileW / RATIO
+    if (tileH > cellH) { tileH = cellH; tileW = tileH * RATIO }
+    if (tileW * tileH > bestW * bestH) { bestW = tileW; bestH = tileH; bestCols = cols }
+  }
+  return { cols: bestCols, tileW: Math.floor(bestW), tileH: Math.floor(bestH) }
 }
 
 export default function VideoGrid({
@@ -111,25 +130,91 @@ export default function VideoGrid({
   }
 
   // ── GRID MODE (default / fallback) ──────────────────────────────────────────
+  return <GridLayout
+    localStream={localStream}
+    localName={localName}
+    remoteStreams={remoteStreams}
+    participants={participants}
+    participantList={participantList}
+    remoteMediaStates={remoteMediaStates}
+    isMuted={isMuted}
+    isCameraOff={isCameraOff}
+  />
+}
+
+interface GridLayoutProps {
+  localStream: MediaStream | null
+  localName: string
+  remoteStreams: Map<string, MediaStream>
+  participants: Map<string, ParticipantDTO>
+  participantList: [string, ParticipantDTO][]
+  remoteMediaStates: Map<string, { isMuted: boolean; isCameraOff: boolean }>
+  isMuted?: boolean
+  isCameraOff?: boolean
+}
+
+function GridLayout({ localStream, localName, remoteStreams, participants, participantList, remoteMediaStates, isMuted, isCameraOff }: GridLayoutProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [tileSize, setTileSize] = useState<{ cols: number; tileW: number; tileH: number } | null>(null)
+
   const totalCount = 1 + participants.size
-  const gridClass =
-    totalCount === 1 ? 'grid-cols-1 max-w-2xl mx-auto' :
-    totalCount === 2 ? 'grid-cols-2' :
-    totalCount <= 4 ? 'grid-cols-2' :
-    'grid-cols-3'
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const obs = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (width > 0 && height > 0) {
+        setTileSize(computeTileSize(width, height, totalCount))
+      }
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [totalCount])
+
+  const allTiles = [
+    { id: 'self', stream: localStream, name: localName, isLocal: true as const, isMuted, isCameraOff },
+    ...participantList.map(([socketId, participant]) => ({
+      id: socketId,
+      stream: remoteStreams.get(socketId) ?? null,
+      name: participant.name,
+      isLocal: false as const,
+      isMuted: remoteMediaStates.get(socketId)?.isMuted,
+      isCameraOff: remoteMediaStates.get(socketId)?.isCameraOff,
+    })),
+  ]
+
+  const cols = tileSize?.cols ?? (totalCount === 1 ? 1 : totalCount <= 4 ? 2 : 3)
 
   return (
-    <div className={`grid ${gridClass} gap-3 p-4 flex-1`}>
-      <VideoTile stream={localStream} name={localName} isLocal isMuted={isMuted} isCameraOff={isCameraOff} />
-      {participantList.map(([socketId, participant]) => (
-        <VideoTile
-          key={socketId}
-          stream={remoteStreams.get(socketId) ?? null}
-          name={participant.name}
-          isMuted={remoteMediaStates.get(socketId)?.isMuted}
-          isCameraOff={remoteMediaStates.get(socketId)?.isCameraOff}
-        />
-      ))}
+    <div ref={containerRef} className="flex-1 min-h-0 flex items-center justify-center p-3">
+      {tileSize && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${cols}, ${tileSize.tileW}px)`,
+            gridAutoRows: `${tileSize.tileH}px`,
+            gap: `${GAP}px`,
+          }}
+        >
+          {allTiles.map((tile) => (
+            <div
+              key={tile.id}
+              style={{ width: tileSize.tileW, height: tileSize.tileH }}
+              className="rounded-xl overflow-hidden"
+            >
+              <VideoTile
+                stream={tile.stream}
+                name={tile.name}
+                isLocal={tile.isLocal}
+                fill
+                isMuted={tile.isMuted}
+                isCameraOff={tile.isCameraOff}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

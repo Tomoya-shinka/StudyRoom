@@ -46,7 +46,8 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
 
   useEffect(() => {
     setPeekRoom(null)
-    socket.emit('room:peek', { roomId })
+    // Register listener BEFORE emit to avoid dropping the response
+    // if the server replies before the listener is attached
     const onPeek = (data: { room?: RoomDTO; error?: string }) => {
       if (data.error === 'not_found' || !data.room) {
         alert('部屋が見つかりません')
@@ -56,6 +57,12 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
       setPeekRoom(data.room)
     }
     socket.on('room:peek:result', onPeek)
+    // If socket is not yet connected, wait for connect then emit
+    if (socket.connected) {
+      socket.emit('room:peek', { roomId })
+    } else {
+      socket.once('connect', () => socket.emit('room:peek', { roomId }))
+    }
     return () => {
       socket.off('room:peek:result', onPeek)
     }
