@@ -1,9 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { VirtualBgConfig, VirtualBgMode } from '@/hooks/useVirtualBackground'
 
-// Preset background images (data-URI gradients — no external dependencies)
 const PRESETS: { label: string; url: string }[] = [
   {
     label: 'オフィス',
@@ -23,6 +22,8 @@ const PRESETS: { label: string; url: string }[] = [
   },
 ]
 
+const LS_UPLOADED = 'vbg_uploaded_image'
+
 interface Props {
   config: VirtualBgConfig
   onChange: (config: VirtualBgConfig) => void
@@ -30,7 +31,14 @@ interface Props {
 
 export default function VirtualBackgroundPanel({ config, onChange }: Props) {
   const [open, setOpen] = useState(false)
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Load previously uploaded image from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(LS_UPLOADED)
+    if (saved) setUploadedImageUrl(saved)
+  }, [])
 
   function select(mode: VirtualBgMode, imageUrl?: string) {
     onChange({ ...config, mode, imageUrl })
@@ -39,8 +47,15 @@ export default function VirtualBackgroundPanel({ config, onChange }: Props) {
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const url = URL.createObjectURL(file)
-    onChange({ mode: 'image', imageUrl: url })
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string
+      // Persist for future sessions
+      try { localStorage.setItem(LS_UPLOADED, dataUrl) } catch { /* quota exceeded */ }
+      setUploadedImageUrl(dataUrl)
+      onChange({ mode: 'image', imageUrl: dataUrl })
+    }
+    reader.readAsDataURL(file)
     e.target.value = ''
   }
 
@@ -69,11 +84,9 @@ export default function VirtualBackgroundPanel({ config, onChange }: Props) {
 
       {open && (
         <>
-          {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
-          {/* Panel */}
-          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 bg-bg-card border border-border-muted rounded-2xl shadow-xl p-4 w-72">
+          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 bg-bg-card border border-border-muted rounded-2xl shadow-xl p-4 w-72 max-h-[80vh] overflow-y-auto">
             <p className="text-sm font-semibold mb-3">バーチャル背景</p>
 
             {/* None */}
@@ -90,7 +103,7 @@ export default function VirtualBackgroundPanel({ config, onChange }: Props) {
             </button>
 
             {/* Blur */}
-            <div className="mb-3">
+            <div className="mb-4">
               <button
                 type="button"
                 onClick={() => select('blur')}
@@ -110,18 +123,43 @@ export default function VirtualBackgroundPanel({ config, onChange }: Props) {
                     min={5}
                     max={30}
                     value={config.blurAmount ?? 15}
-                    onChange={(e) =>
-                      onChange({ ...config, blurAmount: Number(e.target.value) })
-                    }
+                    onChange={(e) => onChange({ ...config, blurAmount: Number(e.target.value) })}
                     className="flex-1 accent-[#D6FF62]"
                   />
                 </div>
               )}
             </div>
 
+            {/* Uploaded image (most recent) */}
+            {uploadedImageUrl && (
+              <>
+                <p className="text-xs text-muted mb-2">アップロードした画像</p>
+                <div className="mb-4">
+                  <button
+                    type="button"
+                    onClick={() => select('image', uploadedImageUrl)}
+                    className={`relative rounded-lg overflow-hidden h-20 w-full transition-all ${
+                      config.mode === 'image' && config.imageUrl === uploadedImageUrl
+                        ? 'ring-2 ring-accent'
+                        : 'ring-1 ring-border-subtle hover:ring-border-muted'
+                    }`}
+                    style={{
+                      backgroundImage: `url("${uploadedImageUrl}")`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  >
+                    <span className="absolute inset-x-0 bottom-0 text-[10px] text-white text-center py-0.5 bg-black/50">
+                      マイ画像
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+
             {/* Preset images */}
             <p className="text-xs text-muted mb-2">プリセット背景</p>
-            <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="grid grid-cols-2 gap-2 mb-4">
               {PRESETS.map((p) => (
                 <button
                   key={p.label}
@@ -147,7 +185,7 @@ export default function VirtualBackgroundPanel({ config, onChange }: Props) {
               onClick={() => fileInputRef.current?.click()}
               className="w-full px-3 py-2 rounded-lg text-sm bg-bg-elevated hover:bg-border-subtle transition-colors text-center"
             >
-              画像をアップロード
+              {uploadedImageUrl ? '別の画像をアップロード' : '画像をアップロード'}
             </button>
             <input
               ref={fileInputRef}

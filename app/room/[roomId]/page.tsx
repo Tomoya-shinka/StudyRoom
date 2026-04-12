@@ -88,6 +88,40 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   } = useWebRTC(roomId, userName)
 
   const [bgConfig, setBgConfig] = useState<VirtualBgConfig>({ mode: 'none' })
+
+  // Restore last background config on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('vbg_config')
+      if (!saved) return
+      const parsed: VirtualBgConfig & { imageType?: string } = JSON.parse(saved)
+      if (parsed.imageType === 'uploaded') {
+        const uploadedUrl = localStorage.getItem('vbg_uploaded_image')
+        if (uploadedUrl) setBgConfig({ mode: 'image', blurAmount: parsed.blurAmount, imageUrl: uploadedUrl })
+      } else {
+        const { imageType: _ignored, ...cfg } = parsed
+        setBgConfig(cfg)
+      }
+    } catch { /* ignore parse errors */ }
+  }, [])
+
+  function handleBgConfigChange(newConfig: VirtualBgConfig) {
+    setBgConfig(newConfig)
+    // Persist config — uploaded images are stored separately, so only flag them
+    try {
+      const toSave: VirtualBgConfig & { imageType?: string } = { mode: newConfig.mode, blurAmount: newConfig.blurAmount }
+      if (newConfig.mode === 'image') {
+        if (newConfig.imageUrl?.startsWith('data:image/svg+xml')) {
+          toSave.imageUrl = newConfig.imageUrl
+          toSave.imageType = 'preset'
+        } else {
+          toSave.imageType = 'uploaded'
+        }
+      }
+      localStorage.setItem('vbg_config', JSON.stringify(toSave))
+    } catch { /* quota */ }
+  }
+
   const processedStream = useVirtualBackground(localStream, bgConfig)
   // What peers and local preview actually see
   const displayStream = processedStream ?? localStream
@@ -164,7 +198,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
             onToggleCamera={toggleCamera}
           />
           <div className="flex flex-wrap items-center justify-center gap-3 w-full mt-2">
-            <VirtualBackgroundPanel config={bgConfig} onChange={setBgConfig} />
+            <VirtualBackgroundPanel config={bgConfig} onChange={handleBgConfigChange} />
             <DeviceSettingsButton onChangeDevices={changeDevices} />
             <button
               type="button"
@@ -251,7 +285,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         activeSpeakerId={activeSpeakerId}
       />
       <div className="shrink-0 flex items-center justify-center gap-3 py-2 border-t border-border-subtle bg-bg-base">
-        <VirtualBackgroundPanel config={bgConfig} onChange={setBgConfig} />
+        <VirtualBackgroundPanel config={bgConfig} onChange={handleBgConfigChange} />
         <MediaControls
           isMuted={isMuted}
           isCameraOff={isCameraOff}
