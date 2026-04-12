@@ -10,7 +10,7 @@ import LeaveButton from '@/components/LeaveButton'
 import DeviceSettingsButton from '@/components/DeviceSettingsButton'
 import MediaControls from '@/components/MediaControls'
 import VirtualBackgroundPanel from '@/components/VirtualBackgroundPanel'
-import { IconCheck, IconLink, IconLayoutGrid, IconLayoutSpeaker, IconLayoutSpotlight } from '@/components/SimpleIcons'
+import { IconCheck, IconLink, IconLayoutGrid, IconLayoutSpeaker, IconLayoutSpotlight, IconMic, IconMicOff, IconVideo, IconVideoOff } from '@/components/SimpleIcons'
 import { useActiveSpeaker } from '@/hooks/useActiveSpeaker'
 import { useVirtualBackground } from '@/hooks/useVirtualBackground'
 import type { ViewMode } from '@/components/VideoGrid'
@@ -276,7 +276,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg-base">
+    <div className="h-screen flex flex-col bg-bg-base overflow-hidden">
       <header className="flex items-center justify-between px-5 py-3 border-b border-border-subtle bg-bg-base">
         <div>
           <h1 className="font-semibold text-lg leading-tight">
@@ -313,6 +313,30 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
               </button>
             ))}
           </div>
+          {/* Media controls — moved from bottom bar */}
+          <div className="flex gap-1">
+            <VirtualBackgroundPanel config={bgConfig} onChange={handleBgConfigChange} compact />
+            <button
+              onClick={toggleMute}
+              title={isMuted ? 'ミュート解除' : 'ミュート'}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                isMuted ? 'bg-red-600 hover:bg-red-700 text-white font-semibold' : 'bg-bg-elevated hover:bg-border-subtle'
+              }`}
+            >
+              {isMuted ? <IconMicOff className="w-4 h-4" /> : <IconMic className="w-4 h-4" />}
+              <span className="hidden sm:inline">{isMuted ? 'ミュート中' : 'マイク'}</span>
+            </button>
+            <button
+              onClick={toggleCamera}
+              title={isCameraOff ? 'カメラをON' : 'カメラをOFF'}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                isCameraOff ? 'bg-red-600 hover:bg-red-700 text-white font-semibold' : 'bg-bg-elevated hover:bg-border-subtle'
+              }`}
+            >
+              {isCameraOff ? <IconVideoOff className="w-4 h-4" /> : <IconVideo className="w-4 h-4" />}
+              <span className="hidden sm:inline">{isCameraOff ? 'カメラOFF' : 'カメラ'}</span>
+            </button>
+          </div>
           <button
             onClick={copyInviteLink}
             className="flex items-center gap-1.5 bg-bg-elevated hover:bg-border-subtle px-3 py-1.5 rounded-lg text-sm transition-colors"
@@ -345,15 +369,6 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         viewMode={viewMode}
         activeSpeakerId={activeSpeakerId}
       />
-      <div className="shrink-0 flex items-center justify-center gap-3 py-2 border-t border-border-subtle bg-bg-base">
-        <VirtualBackgroundPanel config={bgConfig} onChange={handleBgConfigChange} />
-        <MediaControls
-          isMuted={isMuted}
-          isCameraOff={isCameraOff}
-          onToggleMute={toggleMute}
-          onToggleCamera={toggleCamera}
-        />
-      </div>
     </div>
   )
 }

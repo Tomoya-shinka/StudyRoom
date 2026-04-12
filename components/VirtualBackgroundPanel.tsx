@@ -27,9 +27,10 @@ const LS_UPLOADED = 'vbg_uploaded_image'
 interface Props {
   config: VirtualBgConfig
   onChange: (config: VirtualBgConfig) => void
+  compact?: boolean  // header style: icon-only button
 }
 
-export default function VirtualBackgroundPanel({ config, onChange }: Props) {
+export default function VirtualBackgroundPanel({ config, onChange, compact }: Props) {
   const [open, setOpen] = useState(false)
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -67,26 +68,26 @@ export default function VirtualBackgroundPanel({ config, onChange }: Props) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         title="バーチャル背景"
-        className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors ${
-          isActive
-            ? 'bg-accent text-bg-base'
-            : 'bg-bg-elevated hover:bg-border-subtle text-white'
+        className={`flex items-center gap-1 rounded-lg transition-colors ${
+          compact
+            ? `px-2 py-1.5 text-xs ${isActive ? 'bg-accent text-bg-base font-semibold' : 'bg-bg-elevated hover:bg-border-subtle'}`
+            : `flex-col px-4 py-2 rounded-xl text-xs font-medium ${isActive ? 'bg-accent text-bg-base' : 'bg-bg-elevated hover:bg-border-subtle text-white'}`
         }`}
       >
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="2" y="3" width="20" height="14" rx="2" />
           <path d="M8 21h8M12 17v4" />
           <circle cx="9" cy="9" r="2" />
           <path d="m21 15-5-5L5 21" />
         </svg>
-        <span className="text-xs font-medium">背景</span>
+        <span className={compact ? 'hidden sm:inline' : ''}>背景</span>
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
-          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 bg-bg-card border border-border-muted rounded-2xl shadow-xl p-4 w-72 max-h-[80vh] overflow-y-auto">
+          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 bg-bg-card border border-border-muted rounded-2xl shadow-xl p-4 w-72 max-h-[80vh] overflow-y-auto">
             <p className="text-sm font-semibold mb-3">バーチャル背景</p>
 
             {/* None */}
