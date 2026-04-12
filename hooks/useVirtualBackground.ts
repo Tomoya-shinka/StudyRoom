@@ -170,12 +170,16 @@ export function useVirtualBackground(
 
       await video.play()
 
+      let segPending = false
       async function loop() {
         if (!mounted) return
-        if (video.readyState >= 2) {
-          try { await seg.send({ image: video }) } catch { /* ignore stale frames */ }
-        }
+        // Schedule next frame immediately — don't let segmentation block the RAF cadence
         rafRef.current = requestAnimationFrame(loop)
+        if (!segPending && video.readyState >= 2) {
+          segPending = true
+          try { await seg.send({ image: video }) } catch { /* ignore stale frames */ }
+          segPending = false
+        }
       }
       loop()
     }
