@@ -203,6 +203,16 @@ export function useWebRTC(roomId: string, userName: string) {
     setLocalStream(newStream)
   }
 
+  async function replaceVideoTrack(newTrack: MediaStreamTrack | null) {
+    peersRef.current.forEach((peer) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pc = (peer as any)._pc as RTCPeerConnection
+      if (!pc) return
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
+      if (sender) sender.replaceTrack(newTrack)
+    })
+  }
+
   function leaveRoom() {
     localStreamRef.current?.getTracks().forEach((t) => t.stop())
     peersRef.current.forEach((p) => p.destroy())
@@ -217,6 +227,7 @@ export function useWebRTC(roomId: string, userName: string) {
     remoteMediaStates,
     leaveRoom,
     changeDevices,
+    replaceVideoTrack,
     isMuted,
     isCameraOff,
     toggleMute,

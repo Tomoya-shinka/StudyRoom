@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWebRTC } from '@/hooks/useWebRTC'
 import { useSocket } from '@/hooks/useSocket'
@@ -9,9 +9,12 @@ import VideoTile from '@/components/VideoTile'
 import LeaveButton from '@/components/LeaveButton'
 import DeviceSettingsButton from '@/components/DeviceSettingsButton'
 import MediaControls from '@/components/MediaControls'
+import VirtualBackgroundPanel from '@/components/VirtualBackgroundPanel'
 import { IconCheck, IconLink, IconLayoutGrid, IconLayoutSpeaker, IconLayoutSpotlight } from '@/components/SimpleIcons'
 import { useActiveSpeaker } from '@/hooks/useActiveSpeaker'
+import { useVirtualBackground } from '@/hooks/useVirtualBackground'
 import type { ViewMode } from '@/components/VideoGrid'
+import type { VirtualBgConfig } from '@/hooks/useVirtualBackground'
 import type { RoomDTO } from '@/types'
 
 export default function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
@@ -75,6 +78,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     remoteMediaStates,
     leaveRoom,
     changeDevices,
+    replaceVideoTrack,
     isMuted,
     isCameraOff,
     toggleMute,
@@ -82,6 +86,22 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     joinRoom,
     joined,
   } = useWebRTC(roomId, userName)
+
+  const [bgConfig, setBgConfig] = useState<VirtualBgConfig>({ mode: 'none' })
+  const processedStream = useVirtualBackground(localStream, bgConfig)
+  // What peers and local preview actually see
+  const displayStream = processedStream ?? localStream
+
+  // When processed stream changes, replace video track in all peers
+  const prevProcessedRef = useRef<MediaStream | null>(null)
+  useEffect(() => {
+    if (processedStream === prevProcessedRef.current) return
+    prevProcessedRef.current = processedStream
+    const track = processedStream
+      ? processedStream.getVideoTracks()[0] ?? null
+      : localStream?.getVideoTracks()[0] ?? null
+    replaceVideoTrack(track)
+  }, [processedStream, localStream])
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const activeSpeakerId = useActiveSpeaker(remoteStreams)
@@ -130,7 +150,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
           </p>
           <div className="w-full rounded-xl overflow-hidden shadow-lg border border-border-subtle">
             <VideoTile
-              stream={localStream}
+              stream={displayStream}
               name={userName}
               isLocal
               isMuted={isMuted}
@@ -144,6 +164,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
             onToggleCamera={toggleCamera}
           />
           <div className="flex flex-wrap items-center justify-center gap-3 w-full mt-2">
+            <VirtualBackgroundPanel config={bgConfig} onChange={setBgConfig} />
             <DeviceSettingsButton onChangeDevices={changeDevices} />
             <button
               type="button"
@@ -219,7 +240,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
       </header>
 
       <VideoGrid
-        localStream={localStream}
+        localStream={displayStream}
         localName={userName}
         remoteStreams={remoteStreams}
         participants={participants}
@@ -229,12 +250,15 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         viewMode={viewMode}
         activeSpeakerId={activeSpeakerId}
       />
-      <MediaControls
-        isMuted={isMuted}
-        isCameraOff={isCameraOff}
-        onToggleMute={toggleMute}
-        onToggleCamera={toggleCamera}
-      />
+      <div className="shrink-0 flex items-center justify-center gap-3 py-2 border-t border-border-subtle bg-bg-base">
+        <VirtualBackgroundPanel config={bgConfig} onChange={setBgConfig} />
+        <MediaControls
+          isMuted={isMuted}
+          isCameraOff={isCameraOff}
+          onToggleMute={toggleMute}
+          onToggleCamera={toggleCamera}
+        />
+      </div>
     </div>
   )
 }
