@@ -130,12 +130,21 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   // What peers and local preview actually see
   const displayStream = processedStream ?? localStream
 
-  // When processed stream changes, replace video track in all peers
+  // Track localStream in a ref so the effect below can read it without depending on it
+  const localStreamForVBRef = useRef<MediaStream | null>(null)
+  localStreamForVBRef.current = localStream
+
+  // Replace peers' video track only when VB state actually transitions
+  // undefined = "never ran", null = "VB off", MediaStream = "VB on"
+  const prevProcessedRef = useRef<MediaStream | null | undefined>(undefined)
   useEffect(() => {
+    const prev = prevProcessedRef.current
+    prevProcessedRef.current = processedStream
+
     if (processedStream) {
+      // VB just turned on — apply canvas track to all peers
       const canvasTrack = processedStream.getVideoTracks()[0]
       if (!canvasTrack) return
-      // Wait until the canvas track is live before replacing (MediaPipe loads async)
       if (canvasTrack.readyState === 'live') {
         replaceVideoTrack(canvasTrack)
       } else {
@@ -143,12 +152,13 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         canvasTrack.addEventListener('unmute', onLive)
         return () => canvasTrack.removeEventListener('unmute', onLive)
       }
-    } else {
-      // VB turned off — restore raw camera track
-      const rawTrack = localStream?.getVideoTracks()[0] ?? null
-      replaceVideoTrack(rawTrack)
+    } else if (prev != null) {
+      // VB just turned off (was active before) — restore raw camera track
+      const rawTrack = localStreamForVBRef.current?.getVideoTracks()[0] ?? null
+      if (rawTrack) replaceVideoTrack(rawTrack)
     }
-  }, [processedStream, localStream])
+    // prev == null or undefined with processedStream == null → VB was never on, don't touch peers
+  }, [processedStream])
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const activeSpeakerId = useActiveSpeaker(remoteStreams)
