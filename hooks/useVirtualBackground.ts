@@ -72,13 +72,20 @@ export function useVirtualBackground(
 
     let mounted = true
 
+    // Read actual camera resolution synchronously from the track settings
+    // so the canvas has correct dimensions before any async operations
+    const videoTrack = rawStream.getVideoTracks()[0]
+    const trackSettings = videoTrack?.getSettings() ?? {}
+    const camW = trackSettings.width || 1280
+    const camH = trackSettings.height || 720
+
     const canvas = document.createElement('canvas')
-    canvas.width = 1280
-    canvas.height = 720
+    canvas.width = camW
+    canvas.height = camH
 
     const tempCanvas = document.createElement('canvas')
-    tempCanvas.width = canvas.width
-    tempCanvas.height = canvas.height
+    tempCanvas.width = camW
+    tempCanvas.height = camH
 
     const video = document.createElement('video')
     video.srcObject = rawStream
@@ -160,12 +167,17 @@ export function useVirtualBackground(
         }
       })
 
+      // Fallback: update canvas size if actual video dimensions differ from track settings
       video.addEventListener('loadedmetadata', () => {
         if (!mounted) return
-        canvas.width = video.videoWidth || 1280
-        canvas.height = video.videoHeight || 720
-        tempCanvas.width = canvas.width
-        tempCanvas.height = canvas.height
+        const vw = video.videoWidth || camW
+        const vh = video.videoHeight || camH
+        if (vw !== canvas.width || vh !== canvas.height) {
+          canvas.width = vw
+          canvas.height = vh
+          tempCanvas.width = vw
+          tempCanvas.height = vh
+        }
       })
 
       await video.play()
