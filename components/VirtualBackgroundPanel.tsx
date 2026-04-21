@@ -87,7 +87,7 @@ export default function VirtualBackgroundPanel({ config, onChange, compact }: Pr
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
-          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 bg-bg-card border border-border-muted rounded-2xl shadow-xl p-4 w-72 max-h-[80vh] overflow-y-auto">
+          <div className={`absolute ${compact ? 'top-full mt-2' : 'bottom-full mb-2'} left-1/2 -translate-x-1/2 z-50 bg-bg-card border border-border-muted rounded-2xl shadow-xl p-4 w-72 max-h-[80vh] overflow-y-auto`}>
             <p className="text-sm font-semibold mb-3">バーチャル背景</p>
 
             {/* None */}
