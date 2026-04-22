@@ -23,6 +23,8 @@ export function useWebRTC(roomId: string, userName: string) {
   const isScreenSharingRef = useRef(false)
   const [isScreenSharing, setIsScreenSharing] = useState(false)
   const screenStreamRef = useRef<MediaStream | null>(null)
+  const screenPeersRef = useRef<Map<string, SimplePeerType.Instance>>(new Map())
+  const [remoteScreenStreams, setRemoteScreenStreams] = useState<Map<string, MediaStream>>(new Map())
   const hasJoinedRef = useRef(false)
   const [joined, setJoined] = useState(false)
 
@@ -72,16 +74,16 @@ export function useWebRTC(roomId: string, userName: string) {
           if (prev.has(targetSocketId)) return prev
           return new Map(prev).set(targetSocketId, new MediaStream())
         })
-        // Apply the correct video track to the new peer
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const pc = (peer as any)._pc as RTCPeerConnection
-        const sender = pc?.getSenders().find((s) => s.track?.kind === 'video')
-        if (sender) {
-          if (isScreenSharingRef.current && screenStreamRef.current) {
-            sender.replaceTrack(screenStreamRef.current.getVideoTracks()[0]).catch(() => {})
-          } else if (virtualVideoTrackRef.current) {
-            sender.replaceTrack(virtualVideoTrackRef.current).catch(() => {})
-          }
+        // Apply virtual background track if one is active at connection time
+        if (virtualVideoTrackRef.current) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pc = (peer as any)._pc as RTCPeerConnection
+          const sender = pc?.getSenders().find((s) => s.track?.kind === 'video')
+          if (sender) sender.replaceTrack(virtualVideoTrackRef.current).catch(() => {})
+        }
+        // If screen sharing is active, open a screen peer to this new participant
+        if (isScreenSharingRef.current && screenStreamRef.current) {
+          createScreenPeer(targetSocketId, true)
         }
       })
       peer.on('stream', (remoteStream: MediaStream) => {
@@ -140,12 +142,21 @@ export function useWebRTC(roomId: string, userName: string) {
     })
 
     socket.on('signal', (payload: SignalPayload) => {
-      let peer = peersRef.current.get(payload.from as string)
-      if (!peer) {
-        peer = createPeer(payload.from as string, false)
-        peersRef.current.set(payload.from as string, peer)
+      if (payload.isScreen) {
+        // Route to screen-share peer
+        let sPeer = screenPeersRef.current.get(payload.from as string)
+        if (!sPeer) {
+          sPeer = createScreenPeer(payload.from as string, false)
+        }
+        try { sPeer.signal(payload.signal as SimplePeerType.SignalData) } catch { /* stale */ }
+      } else {
+        let peer = peersRef.current.get(payload.from as string)
+        if (!peer) {
+          peer = createPeer(payload.from as string, false)
+          peersRef.current.set(payload.from as string, peer)
+        }
+        try { peer.signal(payload.signal as SimplePeerType.SignalData) } catch { /* stale */ }
       }
-      try { peer.signal(payload.signal as SimplePeerType.SignalData) } catch { /* stale */ }
     })
 
     // ── Async init: load SimplePeer, get media, then join ───────────────────
@@ -241,8 +252,6 @@ export function useWebRTC(roomId: string, userName: string) {
   function replaceVideoTrack(newTrack: MediaStreamTrack | null) {
     // Store so newly connecting peers also get the virtual track applied on connect
     virtualVideoTrackRef.current = newTrack
-    // Don't disturb the active screen share track — restore will happen in stopScreenShare
-    if (isScreenSharingRef.current) return
     const fallback = localStreamRef.current?.getVideoTracks()[0] ?? null
     const trackToSend = newTrack ?? fallback
     peersRef.current.forEach((peer) => {
@@ -254,6 +263,39 @@ export function useWebRTC(roomId: string, userName: string) {
     })
   }
 
+  function createScreenPeer(targetSocketId: string, initiator: boolean): SimplePeerType.Instance {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SP = SimplePeerRef.current as any
+    const sPeer: SimplePeerType.Instance = new SP({
+      initiator,
+      stream: initiator ? screenStreamRef.current ?? undefined : undefined,
+      trickle: true,
+      config: {
+        iceCandidatePoolSize: 10,
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun.cloudflare.com:3478' },
+          { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
+        ],
+      },
+    })
+    sPeer.on('signal', (data: SimplePeerType.SignalData) => {
+      socket.emit('signal', { to: targetSocketId, from: socket.id, signal: data, isScreen: true } as SignalPayload)
+    })
+    sPeer.on('stream', (stream: MediaStream) => {
+      setRemoteScreenStreams((prev) => new Map(prev).set(targetSocketId, stream))
+    })
+    const removeScreen = () => {
+      screenPeersRef.current.delete(targetSocketId)
+      setRemoteScreenStreams((prev) => { const m = new Map(prev); m.delete(targetSocketId); return m })
+    }
+    sPeer.on('close', removeScreen)
+    sPeer.on('error', removeScreen)
+    screenPeersRef.current.set(targetSocketId, sPeer)
+    return sPeer
+  }
+
   async function startScreenShare() {
     if (isScreenSharingRef.current) return
     let stream: MediaStream
@@ -262,23 +304,18 @@ export function useWebRTC(roomId: string, userName: string) {
     } catch {
       return // user cancelled or permission denied
     }
-    const screenTrack = stream.getVideoTracks()[0]
     screenStreamRef.current = stream
     isScreenSharingRef.current = true
     setIsScreenSharing(true)
 
-    // Push screen track to all peers
-    peersRef.current.forEach((peer) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pc = (peer as any)._pc as RTCPeerConnection
-      if (!pc) return
-      const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
-      if (sender) sender.replaceTrack(screenTrack).catch(() => {})
+    // Open a dedicated screen-share peer connection to each connected participant
+    peersRef.current.forEach((_, socketId) => {
+      createScreenPeer(socketId, true)
     })
     socket.emit('media:state', { roomId, isMuted: isMutedRef.current, isCameraOff: isCameraOffRef.current, isScreenSharing: true })
 
     // When browser's native "Stop sharing" button is clicked
-    screenTrack.addEventListener('ended', stopScreenShare)
+    stream.getVideoTracks()[0].addEventListener('ended', stopScreenShare)
   }
 
   function stopScreenShare() {
@@ -288,15 +325,11 @@ export function useWebRTC(roomId: string, userName: string) {
     isScreenSharingRef.current = false
     setIsScreenSharing(false)
 
-    // Restore VB track if active, otherwise raw camera track
-    const restoreTrack = virtualVideoTrackRef.current ?? localStreamRef.current?.getVideoTracks()[0] ?? null
-    peersRef.current.forEach((peer) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pc = (peer as any)._pc as RTCPeerConnection
-      if (!pc) return
-      const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
-      if (sender && restoreTrack) sender.replaceTrack(restoreTrack).catch(() => {})
-    })
+    // Tear down all screen peers
+    screenPeersRef.current.forEach((p) => p.destroy())
+    screenPeersRef.current.clear()
+    setRemoteScreenStreams(new Map())
+
     socket.emit('media:state', { roomId, isMuted: isMutedRef.current, isCameraOff: isCameraOffRef.current, isScreenSharing: false })
   }
 
@@ -322,7 +355,8 @@ export function useWebRTC(roomId: string, userName: string) {
     joinRoom,
     joined,
     isScreenSharing,
-    screenStream: screenStreamRef.current,
+    screenStream: screenStreamRef,   // ref so VideoGrid can read latest value
+    remoteScreenStreams,
     startScreenShare,
     stopScreenShare,
   }

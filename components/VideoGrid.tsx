@@ -9,7 +9,9 @@ export type ViewMode = 'grid' | 'speaker' | 'spotlight'
 interface VideoGridProps {
   localStream: MediaStream | null
   localName: string
+  localScreenStream: MediaStream | null
   remoteStreams: Map<string, MediaStream>
+  remoteScreenStreams: Map<string, MediaStream>
   participants: Map<string, ParticipantDTO>
   remoteMediaStates: Map<string, { isMuted: boolean; isCameraOff: boolean; isScreenSharing: boolean }>
   isMuted?: boolean
@@ -38,8 +40,8 @@ function computeTileSize(containerW: number, containerH: number, n: number): { c
 }
 
 export default function VideoGrid({
-  localStream, localName, remoteStreams, participants, remoteMediaStates,
-  isMuted, isCameraOff, isScreenSharing, viewMode, activeSpeakerId,
+  localStream, localName, localScreenStream, remoteStreams, remoteScreenStreams,
+  participants, remoteMediaStates, isMuted, isCameraOff, isScreenSharing, viewMode, activeSpeakerId,
 }: VideoGridProps) {
   const participantList = Array.from(participants.entries())
   const hasRemote = participantList.length > 0
@@ -138,7 +140,9 @@ export default function VideoGrid({
   return <GridLayout
     localStream={localStream}
     localName={localName}
+    localScreenStream={localScreenStream}
     remoteStreams={remoteStreams}
+    remoteScreenStreams={remoteScreenStreams}
     participants={participants}
     participantList={participantList}
     remoteMediaStates={remoteMediaStates}
@@ -151,7 +155,9 @@ export default function VideoGrid({
 interface GridLayoutProps {
   localStream: MediaStream | null
   localName: string
+  localScreenStream: MediaStream | null
   remoteStreams: Map<string, MediaStream>
+  remoteScreenStreams: Map<string, MediaStream>
   participants: Map<string, ParticipantDTO>
   participantList: [string, ParticipantDTO][]
   remoteMediaStates: Map<string, { isMuted: boolean; isCameraOff: boolean; isScreenSharing: boolean }>
@@ -160,7 +166,7 @@ interface GridLayoutProps {
   isScreenSharing?: boolean
 }
 
-function GridLayout({ localStream, localName, remoteStreams, participants, participantList, remoteMediaStates, isMuted, isCameraOff, isScreenSharing }: GridLayoutProps) {
+function GridLayout({ localStream, localName, localScreenStream, remoteStreams, remoteScreenStreams, participants, participantList, remoteMediaStates, isMuted, isCameraOff, isScreenSharing }: GridLayoutProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [tileSize, setTileSize] = useState<{ cols: number; tileW: number; tileH: number } | null>(null)
 
@@ -180,16 +186,31 @@ function GridLayout({ localStream, localName, remoteStreams, participants, parti
   }, [totalCount])
 
   const allTiles = [
-    { id: 'self', stream: localStream, name: localName, isLocal: true as const, isMuted, isCameraOff, isScreenSharing },
-    ...participantList.map(([socketId, participant]) => ({
-      id: socketId,
-      stream: remoteStreams.get(socketId) ?? null,
-      name: participant.name,
-      isLocal: false as const,
-      isMuted: remoteMediaStates.get(socketId)?.isMuted,
-      isCameraOff: remoteMediaStates.get(socketId)?.isCameraOff,
-      isScreenSharing: remoteMediaStates.get(socketId)?.isScreenSharing,
-    })),
+    { id: 'self', stream: localStream, name: localName, isLocal: true as const, isMuted, isCameraOff, isScreenSharing: false },
+    // Local screen share tile — appears right after self camera
+    ...(localScreenStream ? [{ id: 'self-screen', stream: localScreenStream, name: `${localName}の画面`, isLocal: true as const, isMuted: false, isCameraOff: false, isScreenSharing: true }] : []),
+    ...participantList.flatMap(([socketId, participant]) => {
+      const cam = {
+        id: socketId,
+        stream: remoteStreams.get(socketId) ?? null,
+        name: participant.name,
+        isLocal: false as const,
+        isMuted: remoteMediaStates.get(socketId)?.isMuted,
+        isCameraOff: remoteMediaStates.get(socketId)?.isCameraOff,
+        isScreenSharing: false,
+      }
+      const screenStream = remoteScreenStreams.get(socketId)
+      const screen = screenStream ? {
+        id: `${socketId}-screen`,
+        stream: screenStream,
+        name: `${participant.name}の画面`,
+        isLocal: false as const,
+        isMuted: false,
+        isCameraOff: false,
+        isScreenSharing: true,
+      } : null
+      return screen ? [cam, screen] : [cam]
+    }),
   ]
 
   const cols = tileSize?.cols ?? (totalCount === 1 ? 1 : totalCount <= 4 ? 2 : 3)

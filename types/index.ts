@@ -31,4 +31,5 @@ export interface SignalPayload {
   to: string
   from: string
   signal: unknown
+  isScreen?: boolean   // true = screen-share peer connection
 }

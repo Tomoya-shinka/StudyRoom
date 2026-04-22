@@ -98,6 +98,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     joined,
     isScreenSharing,
     screenStream,
+    remoteScreenStreams,
     startScreenShare,
     stopScreenShare,
   } = useWebRTC(roomId, userName)
@@ -138,8 +139,8 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   }
 
   const processedStream = useVirtualBackground(localStream, bgConfig)
-  // What local preview shows: screen share > VB-processed > raw camera
-  const displayStream = screenStream ?? processedStream ?? localStream
+  // Local preview always shows camera (with VB if active)
+  const displayStream = processedStream ?? localStream
 
   // Track localStream in a ref so the effect below can read it without depending on it
   const localStreamForVBRef = useRef<MediaStream | null>(null)
@@ -385,7 +386,9 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
       <VideoGrid
         localStream={displayStream}
         localName={userName}
+        localScreenStream={isScreenSharing ? screenStream.current : null}
         remoteStreams={remoteStreams}
+        remoteScreenStreams={remoteScreenStreams}
         participants={participants}
         remoteMediaStates={remoteMediaStates}
         isMuted={isMuted}
