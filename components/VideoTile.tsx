@@ -38,7 +38,7 @@ export default function VideoTile({ stream, name, isLocal = false, isMuted = fal
           autoPlay
           playsInline
           muted={isLocal}
-          className={`w-full h-full object-cover${isLocal ? ' scale-x-[-1]' : ''}`}
+          className={`w-full h-full object-cover${isLocal && !isScreenSharing ? ' scale-x-[-1]' : ''}`}
         />
       ) : (
         <div className="text-muted text-sm">接続中...</div>
