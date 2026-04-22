@@ -170,7 +170,10 @@ function GridLayout({ localStream, localName, localScreenStream, remoteStreams, 
   const containerRef = useRef<HTMLDivElement>(null)
   const [tileSize, setTileSize] = useState<{ cols: number; tileW: number; tileH: number } | null>(null)
 
-  const totalCount = 1 + participants.size
+  // Total visible tiles = camera tiles + screen share tiles
+  const tileCount = 1 + participants.size
+    + (localScreenStream ? 1 : 0)
+    + remoteScreenStreams.size
 
   useEffect(() => {
     const el = containerRef.current
@@ -178,12 +181,12 @@ function GridLayout({ localStream, localName, localScreenStream, remoteStreams, 
     const obs = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect
       if (width > 0 && height > 0) {
-        setTileSize(computeTileSize(width, height, totalCount))
+        setTileSize(computeTileSize(width, height, tileCount))
       }
     })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [totalCount])
+  }, [tileCount])
 
   const allTiles = [
     { id: 'self', stream: localStream, name: localName, isLocal: true as const, isMuted, isCameraOff, isScreenSharing: false },
@@ -213,7 +216,7 @@ function GridLayout({ localStream, localName, localScreenStream, remoteStreams, 
     }),
   ]
 
-  const cols = tileSize?.cols ?? (totalCount === 1 ? 1 : totalCount <= 4 ? 2 : 3)
+  const cols = tileSize?.cols ?? (tileCount === 1 ? 1 : tileCount <= 4 ? 2 : 3)
 
   return (
     <div ref={containerRef} className="flex-1 min-h-0 flex items-center justify-center p-3">
