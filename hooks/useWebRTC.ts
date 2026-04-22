@@ -19,7 +19,10 @@ export function useWebRTC(roomId: string, userName: string) {
   const [isCameraOff, setIsCameraOff] = useState(false)
   const isMutedRef = useRef(false)
   const isCameraOffRef = useRef(false)
-  const [remoteMediaStates, setRemoteMediaStates] = useState<Map<string, { isMuted: boolean; isCameraOff: boolean }>>(new Map())
+  const [remoteMediaStates, setRemoteMediaStates] = useState<Map<string, { isMuted: boolean; isCameraOff: boolean; isScreenSharing: boolean }>>(new Map())
+  const isScreenSharingRef = useRef(false)
+  const [isScreenSharing, setIsScreenSharing] = useState(false)
+  const screenStreamRef = useRef<MediaStream | null>(null)
   const hasJoinedRef = useRef(false)
   const [joined, setJoined] = useState(false)
 
@@ -69,12 +72,16 @@ export function useWebRTC(roomId: string, userName: string) {
           if (prev.has(targetSocketId)) return prev
           return new Map(prev).set(targetSocketId, new MediaStream())
         })
-        // Apply virtual background track if one is active at connection time
-        if (virtualVideoTrackRef.current) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const pc = (peer as any)._pc as RTCPeerConnection
-          const sender = pc?.getSenders().find((s) => s.track?.kind === 'video')
-          if (sender) sender.replaceTrack(virtualVideoTrackRef.current).catch(() => {})
+        // Apply the correct video track to the new peer
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pc = (peer as any)._pc as RTCPeerConnection
+        const sender = pc?.getSenders().find((s) => s.track?.kind === 'video')
+        if (sender) {
+          if (isScreenSharingRef.current && screenStreamRef.current) {
+            sender.replaceTrack(screenStreamRef.current.getVideoTracks()[0]).catch(() => {})
+          } else if (virtualVideoTrackRef.current) {
+            sender.replaceTrack(virtualVideoTrackRef.current).catch(() => {})
+          }
         }
       })
       peer.on('stream', (remoteStream: MediaStream) => {
@@ -124,12 +131,12 @@ export function useWebRTC(roomId: string, userName: string) {
       setRemoteMediaStates((prev) => { const m = new Map(prev); m.delete(socketId); return m })
     })
 
-    socket.on('media:state', ({ socketId, isMuted: muted, isCameraOff: camOff }: { socketId: string; isMuted: boolean; isCameraOff: boolean }) => {
-      setRemoteMediaStates((prev) => new Map(prev).set(socketId, { isMuted: muted, isCameraOff: camOff }))
+    socket.on('media:state', ({ socketId, isMuted: muted, isCameraOff: camOff, isScreenSharing: screenSharing }: { socketId: string; isMuted: boolean; isCameraOff: boolean; isScreenSharing?: boolean }) => {
+      setRemoteMediaStates((prev) => new Map(prev).set(socketId, { isMuted: muted, isCameraOff: camOff, isScreenSharing: screenSharing ?? false }))
     })
 
     socket.on('media:state:request', ({ from }: { from: string }) => {
-      socket.emit('media:state:response', { to: from, isMuted: isMutedRef.current, isCameraOff: isCameraOffRef.current })
+      socket.emit('media:state:response', { to: from, isMuted: isMutedRef.current, isCameraOff: isCameraOffRef.current, isScreenSharing: isScreenSharingRef.current })
     })
 
     socket.on('signal', (payload: SignalPayload) => {
@@ -234,6 +241,8 @@ export function useWebRTC(roomId: string, userName: string) {
   function replaceVideoTrack(newTrack: MediaStreamTrack | null) {
     // Store so newly connecting peers also get the virtual track applied on connect
     virtualVideoTrackRef.current = newTrack
+    // Don't disturb the active screen share track — restore will happen in stopScreenShare
+    if (isScreenSharingRef.current) return
     const fallback = localStreamRef.current?.getVideoTracks()[0] ?? null
     const trackToSend = newTrack ?? fallback
     peersRef.current.forEach((peer) => {
@@ -243,6 +252,52 @@ export function useWebRTC(roomId: string, userName: string) {
       const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
       if (sender) sender.replaceTrack(trackToSend).catch(() => {})
     })
+  }
+
+  async function startScreenShare() {
+    if (isScreenSharingRef.current) return
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+    } catch {
+      return // user cancelled or permission denied
+    }
+    const screenTrack = stream.getVideoTracks()[0]
+    screenStreamRef.current = stream
+    isScreenSharingRef.current = true
+    setIsScreenSharing(true)
+
+    // Push screen track to all peers
+    peersRef.current.forEach((peer) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pc = (peer as any)._pc as RTCPeerConnection
+      if (!pc) return
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
+      if (sender) sender.replaceTrack(screenTrack).catch(() => {})
+    })
+    socket.emit('media:state', { roomId, isMuted: isMutedRef.current, isCameraOff: isCameraOffRef.current, isScreenSharing: true })
+
+    // When browser's native "Stop sharing" button is clicked
+    screenTrack.addEventListener('ended', stopScreenShare)
+  }
+
+  function stopScreenShare() {
+    if (!isScreenSharingRef.current) return
+    screenStreamRef.current?.getTracks().forEach((t) => t.stop())
+    screenStreamRef.current = null
+    isScreenSharingRef.current = false
+    setIsScreenSharing(false)
+
+    // Restore VB track if active, otherwise raw camera track
+    const restoreTrack = virtualVideoTrackRef.current ?? localStreamRef.current?.getVideoTracks()[0] ?? null
+    peersRef.current.forEach((peer) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pc = (peer as any)._pc as RTCPeerConnection
+      if (!pc) return
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
+      if (sender && restoreTrack) sender.replaceTrack(restoreTrack).catch(() => {})
+    })
+    socket.emit('media:state', { roomId, isMuted: isMutedRef.current, isCameraOff: isCameraOffRef.current, isScreenSharing: false })
   }
 
   function leaveRoom() {
@@ -266,5 +321,9 @@ export function useWebRTC(roomId: string, userName: string) {
     toggleCamera,
     joinRoom,
     joined,
+    isScreenSharing,
+    screenStream: screenStreamRef.current,
+    startScreenShare,
+    stopScreenShare,
   }
 }

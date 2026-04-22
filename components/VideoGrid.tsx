@@ -11,9 +11,10 @@ interface VideoGridProps {
   localName: string
   remoteStreams: Map<string, MediaStream>
   participants: Map<string, ParticipantDTO>
-  remoteMediaStates: Map<string, { isMuted: boolean; isCameraOff: boolean }>
+  remoteMediaStates: Map<string, { isMuted: boolean; isCameraOff: boolean; isScreenSharing: boolean }>
   isMuted?: boolean
   isCameraOff?: boolean
+  isScreenSharing?: boolean
   viewMode: ViewMode
   activeSpeakerId: string | null
 }
@@ -38,7 +39,7 @@ function computeTileSize(containerW: number, containerH: number, n: number): { c
 
 export default function VideoGrid({
   localStream, localName, remoteStreams, participants, remoteMediaStates,
-  isMuted, isCameraOff, viewMode, activeSpeakerId,
+  isMuted, isCameraOff, isScreenSharing, viewMode, activeSpeakerId,
 }: VideoGridProps) {
   const participantList = Array.from(participants.entries())
   const hasRemote = participantList.length > 0
@@ -59,6 +60,7 @@ export default function VideoGrid({
               fill
               isMuted={mainId ? remoteMediaStates.get(mainId)?.isMuted : undefined}
               isCameraOff={mainId ? remoteMediaStates.get(mainId)?.isCameraOff : undefined}
+              isScreenSharing={mainId ? remoteMediaStates.get(mainId)?.isScreenSharing : undefined}
             />
           </div>
         </div>
@@ -72,6 +74,7 @@ export default function VideoGrid({
             compact
             isMuted={isMuted}
             isCameraOff={isCameraOff}
+            isScreenSharing={isScreenSharing}
           />
         </div>
       </div>
@@ -93,7 +96,7 @@ export default function VideoGrid({
         <div className="flex gap-2 shrink-0 items-start">
           {/* Self (always shown) */}
           <div className="shrink-0 rounded-xl overflow-hidden" style={{ height: 96, aspectRatio: '16/9' }}>
-            <VideoTile stream={localStream} name={localName} isLocal fill compact isMuted={isMuted} isCameraOff={isCameraOff} />
+            <VideoTile stream={localStream} name={localName} isLocal fill compact isMuted={isMuted} isCameraOff={isCameraOff} isScreenSharing={isScreenSharing} />
           </div>
           {/* Other participants — max 4, left-aligned, no stretch */}
           {stripIds.map((id) => (
@@ -105,6 +108,7 @@ export default function VideoGrid({
                 compact
                 isMuted={remoteMediaStates.get(id)?.isMuted}
                 isCameraOff={remoteMediaStates.get(id)?.isCameraOff}
+                isScreenSharing={remoteMediaStates.get(id)?.isScreenSharing}
               />
             </div>
           ))}
@@ -120,6 +124,7 @@ export default function VideoGrid({
               fill
               isMuted={mainId ? remoteMediaStates.get(mainId)?.isMuted : undefined}
               isCameraOff={mainId ? remoteMediaStates.get(mainId)?.isCameraOff : undefined}
+              isScreenSharing={mainId ? remoteMediaStates.get(mainId)?.isScreenSharing : undefined}
             />
           </div>
           </div>
@@ -139,6 +144,7 @@ export default function VideoGrid({
     remoteMediaStates={remoteMediaStates}
     isMuted={isMuted}
     isCameraOff={isCameraOff}
+    isScreenSharing={isScreenSharing}
   />
 }
 
@@ -148,12 +154,13 @@ interface GridLayoutProps {
   remoteStreams: Map<string, MediaStream>
   participants: Map<string, ParticipantDTO>
   participantList: [string, ParticipantDTO][]
-  remoteMediaStates: Map<string, { isMuted: boolean; isCameraOff: boolean }>
+  remoteMediaStates: Map<string, { isMuted: boolean; isCameraOff: boolean; isScreenSharing: boolean }>
   isMuted?: boolean
   isCameraOff?: boolean
+  isScreenSharing?: boolean
 }
 
-function GridLayout({ localStream, localName, remoteStreams, participants, participantList, remoteMediaStates, isMuted, isCameraOff }: GridLayoutProps) {
+function GridLayout({ localStream, localName, remoteStreams, participants, participantList, remoteMediaStates, isMuted, isCameraOff, isScreenSharing }: GridLayoutProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [tileSize, setTileSize] = useState<{ cols: number; tileW: number; tileH: number } | null>(null)
 
@@ -173,7 +180,7 @@ function GridLayout({ localStream, localName, remoteStreams, participants, parti
   }, [totalCount])
 
   const allTiles = [
-    { id: 'self', stream: localStream, name: localName, isLocal: true as const, isMuted, isCameraOff },
+    { id: 'self', stream: localStream, name: localName, isLocal: true as const, isMuted, isCameraOff, isScreenSharing },
     ...participantList.map(([socketId, participant]) => ({
       id: socketId,
       stream: remoteStreams.get(socketId) ?? null,
@@ -181,6 +188,7 @@ function GridLayout({ localStream, localName, remoteStreams, participants, parti
       isLocal: false as const,
       isMuted: remoteMediaStates.get(socketId)?.isMuted,
       isCameraOff: remoteMediaStates.get(socketId)?.isCameraOff,
+      isScreenSharing: remoteMediaStates.get(socketId)?.isScreenSharing,
     })),
   ]
 
@@ -210,6 +218,7 @@ function GridLayout({ localStream, localName, remoteStreams, participants, parti
                 fill
                 isMuted={tile.isMuted}
                 isCameraOff={tile.isCameraOff}
+                isScreenSharing={tile.isScreenSharing}
               />
             </div>
           ))}

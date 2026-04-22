@@ -122,16 +122,16 @@ app.prepare().then(() => {
       io.to(payload.to).emit('signal', payload)
     })
 
-    socket.on('media:state', ({ roomId, isMuted, isCameraOff }: { roomId: string; isMuted: boolean; isCameraOff: boolean }) => {
-      socket.to(roomId).emit('media:state', { socketId: socket.id, isMuted, isCameraOff })
+    socket.on('media:state', ({ roomId, isMuted, isCameraOff, isScreenSharing }: { roomId: string; isMuted: boolean; isCameraOff: boolean; isScreenSharing?: boolean }) => {
+      socket.to(roomId).emit('media:state', { socketId: socket.id, isMuted, isCameraOff, isScreenSharing: isScreenSharing ?? false })
     })
 
     socket.on('media:state:request', ({ targetSocketId }: { targetSocketId: string }) => {
       io.to(targetSocketId).emit('media:state:request', { from: socket.id })
     })
 
-    socket.on('media:state:response', ({ to, isMuted, isCameraOff }: { to: string; isMuted: boolean; isCameraOff: boolean }) => {
-      io.to(to).emit('media:state', { socketId: socket.id, isMuted, isCameraOff })
+    socket.on('media:state:response', ({ to, isMuted, isCameraOff, isScreenSharing }: { to: string; isMuted: boolean; isCameraOff: boolean; isScreenSharing?: boolean }) => {
+      io.to(to).emit('media:state', { socketId: socket.id, isMuted, isCameraOff, isScreenSharing: isScreenSharing ?? false })
     })
 
     socket.on('disconnect', () => {

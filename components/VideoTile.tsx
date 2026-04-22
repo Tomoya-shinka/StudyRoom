@@ -9,13 +9,14 @@ interface VideoTileProps {
   isLocal?: boolean
   isMuted?: boolean
   isCameraOff?: boolean
+  isScreenSharing?: boolean
   /** When true, fills parent container instead of forcing aspect-video ratio */
   fill?: boolean
   /** Hides the camera-off text label — use for small strip tiles */
   compact?: boolean
 }
 
-export default function VideoTile({ stream, name, isLocal = false, isMuted = false, isCameraOff = false, fill = false, compact = false }: VideoTileProps) {
+export default function VideoTile({ stream, name, isLocal = false, isMuted = false, isCameraOff = false, isScreenSharing = false, fill = false, compact = false }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -48,6 +49,17 @@ export default function VideoTile({ stream, name, isLocal = false, isMuted = fal
         <div className="absolute inset-0 bg-bg-base/95 flex flex-col items-center justify-center gap-2">
           <IconVideoOff className={compact ? 'w-8 h-8 text-muted' : 'w-12 h-12 text-muted'} />
           {!compact && <span className="text-sm text-muted">カメラOFF</span>}
+        </div>
+      )}
+
+      {/* Screen sharing badge — top-left */}
+      {isScreenSharing && (
+        <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-accent text-bg-base text-xs font-semibold px-2 py-1 rounded-full">
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8M12 17v4" />
+          </svg>
+          {!compact && '画面共有中'}
         </div>
       )}
 

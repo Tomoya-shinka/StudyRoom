@@ -96,6 +96,10 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     toggleCamera,
     joinRoom,
     joined,
+    isScreenSharing,
+    screenStream,
+    startScreenShare,
+    stopScreenShare,
   } = useWebRTC(roomId, userName)
 
   const [bgConfig, setBgConfig] = useState<VirtualBgConfig>({ mode: 'none' })
@@ -134,8 +138,8 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   }
 
   const processedStream = useVirtualBackground(localStream, bgConfig)
-  // What peers and local preview actually see
-  const displayStream = processedStream ?? localStream
+  // What local preview shows: screen share > VB-processed > raw camera
+  const displayStream = screenStream ?? processedStream ?? localStream
 
   // Track localStream in a ref so the effect below can read it without depending on it
   const localStreamForVBRef = useRef<MediaStream | null>(null)
@@ -322,6 +326,19 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
           </div>
           {/* Media controls — moved from bottom bar */}
           <div className="flex gap-1">
+            <button
+              onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+              title={isScreenSharing ? '画面共有を停止' : '画面を共有'}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                isScreenSharing ? 'bg-accent text-bg-base font-semibold' : 'bg-bg-elevated hover:bg-border-subtle'
+              }`}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <path d="M8 21h8M12 17v4" />
+              </svg>
+              <span className="hidden sm:inline">{isScreenSharing ? '共有中' : '画面共有'}</span>
+            </button>
             <VirtualBackgroundPanel config={bgConfig} onChange={handleBgConfigChange} compact />
             <button
               onClick={toggleMute}
@@ -373,6 +390,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         remoteMediaStates={remoteMediaStates}
         isMuted={isMuted}
         isCameraOff={isCameraOff}
+        isScreenSharing={isScreenSharing}
         viewMode={viewMode}
         activeSpeakerId={activeSpeakerId}
       />
